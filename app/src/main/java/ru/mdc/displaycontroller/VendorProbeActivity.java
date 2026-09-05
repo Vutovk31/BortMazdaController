@@ -3,7 +3,6 @@ package ru.mdc.displaycontroller;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
-import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -21,15 +20,12 @@ import android.widget.Toast;
 
 import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -55,7 +51,8 @@ public class VendorProbeActivity extends Activity {
     private static final String[] KEYS = {
             "can", "canbus", "mcu", "car", "vehicle", "climate", "air", "temp", "fan",
             "display", "lcd", "screen", "mazda", "steer", "key", "trip", "fuel", "range",
-            "clock", "info", "radio", "service", "broadcast", "intent", "raise", "rzc"
+            "clock", "info", "radio", "service", "broadcast", "intent", "raise", "rzc",
+            "twutil", "commandservice", "aidl", "drive_data", "air_data"
     };
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -69,7 +66,7 @@ public class VendorProbeActivity extends Activity {
         root.setBackgroundColor(Color.rgb(8,10,13));
         TextView h = text("MDC TS10 VENDOR PROBE • " + VERSION, 22, Color.WHITE);
         root.addView(h);
-        root.addView(text("READ-ONLY. No Binder calls, broadcasts, CAN writes or device-node writes. This probe only inventories installed TS10 vendor packages/APKs/classes/strings.", 14, Color.LTGRAY));
+        root.addView(text("READ-ONLY. No Binder calls, broadcasts, CAN writes or device-node writes. This probe inventories installed TS10 vendor packages/APKs/classes/strings and reflects TWUtil if present.", 14, Color.LTGRAY));
         Button run = new Button(this); run.setText("RUN FULL READ-ONLY VENDOR PROBE"); run.setOnClickListener(v -> runProbe()); root.addView(run);
         Button copy = new Button(this); copy.setText("COPY PROBE REPORT"); copy.setOnClickListener(v -> copyReport()); root.addView(copy);
         Button save = new Button(this); save.setText("SAVE PROBE REPORT"); save.setOnClickListener(v -> saveReport()); root.addView(save);
@@ -85,17 +82,42 @@ public class VendorProbeActivity extends Activity {
     }
 
     private void runProbe() {
-        output.setText("RUNNING… this can take 10–40 seconds on TS10.");
+        output.setText("RUNNING… this can take 10–60 seconds on TS10.");
         io.submit(() -> {
             StringBuilder b = new StringBuilder();
-            b.append("MDC_VENDOR_PROBE_SCHEMA=1\nVERSION=").append(VERSION).append("\n");
+            b.append("MDC_VENDOR_PROBE_SCHEMA=2\nVERSION=").append(VERSION).append("\n");
             b.append("READ_ONLY=true\nCAN_WRITE=false\nUNKNOWN_BINDER_CALL=false\nUNKNOWN_BROADCAST_SEND=false\nDEVICE_NODE_WRITE=false\n");
             b.append("manufacturer=").append(Build.MANUFACTURER).append("\nmodel=").append(Build.MODEL).append("\nandroid=").append(Build.VERSION.RELEASE).append("\n\n");
+            reflectTwUtil(b);
             PackageManager pm = getPackageManager();
             for (String pkg : PACKAGES) probePackage(pm, pkg, b);
-            report = limit(b.toString(), 120000);
+            report = limit(b.toString(), 140000);
             runOnUiThread(() -> output.setText(report));
         });
+    }
+
+    private void reflectTwUtil(StringBuilder b) {
+        b.append("\n====================\nTWUTIL_REFLECTION\n");
+        try {
+            Class<?> c = Class.forName("android.tw.john.TWUtil", false, getClassLoader());
+            b.append("classFound=true\nclass=").append(c.getName()).append("\n");
+            java.lang.reflect.Constructor<?>[] cs = c.getDeclaredConstructors();
+            for (java.lang.reflect.Constructor<?> x : cs) b.append("ctor=").append(x.toString()).append("\n");
+            java.lang.reflect.Method[] ms = c.getDeclaredMethods();
+            int n = 0;
+            for (java.lang.reflect.Method m : ms) {
+                if (n++ >= 500) break;
+                b.append("method=").append(m.toString()).append("\n");
+            }
+            java.lang.reflect.Field[] fs = c.getDeclaredFields();
+            n = 0;
+            for (java.lang.reflect.Field f : fs) {
+                if (n++ >= 300) break;
+                b.append("field=").append(f.toString()).append("\n");
+            }
+        } catch (Throwable t) {
+            b.append("classFound=false\nerror=").append(t.getClass().getSimpleName()).append(":").append(safe(t.getMessage())).append("\n");
+        }
     }
 
     private void probePackage(PackageManager pm, String pkg, StringBuilder b) {
@@ -130,15 +152,21 @@ public class VendorProbeActivity extends Activity {
     private void probeDexClasses(String apk, StringBuilder b) {
         b.append("## dex classes matching OEM keywords\n");
         int count = 0;
-        try (DexFile dex = new DexFile(apk)) {
+        DexFile dex = null;
+        try {
+            dex = new DexFile(apk);
             Enumeration<String> e = dex.entries();
-            while (e.hasMoreElements() && count < 500) {
+            while (e.hasMoreElements() && count < 700) {
                 String name = e.nextElement();
                 if (relevant(name)) { b.append("class=").append(name).append("\n"); count++; }
             }
             b.append("classMatchCount=").append(count).append("\n");
         } catch (Throwable t) {
             b.append("dexClassScanError=").append(t.getClass().getSimpleName()).append(":").append(safe(t.getMessage())).append("\n");
+        } finally {
+            if (dex != null) {
+                try { dex.close(); } catch (Throwable ignored) {}
+            }
         }
     }
 
@@ -147,14 +175,14 @@ public class VendorProbeActivity extends Activity {
         Set<String> hits = new LinkedHashSet<>();
         try (ZipFile z = new ZipFile(apk)) {
             Enumeration<? extends ZipEntry> es = z.entries();
-            while (es.hasMoreElements() && hits.size() < 800) {
+            while (es.hasMoreElements() && hits.size() < 1000) {
                 ZipEntry ze = es.nextElement();
                 String n = ze.getName();
-                if (!(n.equals("AndroidManifest.xml") || n.startsWith("classes") && n.endsWith(".dex") || n.endsWith(".xml"))) continue;
+                if (!(n.equals("AndroidManifest.xml") || (n.startsWith("classes") && n.endsWith(".dex")) || n.endsWith(".xml"))) continue;
                 try (BufferedInputStream in = new BufferedInputStream(z.getInputStream(ze))) {
                     StringBuilder s = new StringBuilder();
-                    int c; long read = 0; long cap = n.endsWith(".dex") ? 6_000_000L : 2_000_000L;
-                    while ((c = in.read()) != -1 && read++ < cap && hits.size() < 800) {
+                    int c; long read = 0; long cap = n.endsWith(".dex") ? 8_000_000L : 2_000_000L;
+                    while ((c = in.read()) != -1 && read++ < cap && hits.size() < 1000) {
                         if (c >= 32 && c <= 126) {
                             s.append((char)c);
                             if (s.length() > 240) flushCandidate(s, hits);
