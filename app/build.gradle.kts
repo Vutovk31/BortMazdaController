@@ -10,8 +10,8 @@ android {
         applicationId = "ru.mdc.displaycontroller"
         minSdk = 26
         targetSdk = 31
-        versionCode = 10103
-        versionName = "1.0.1-internal-3"
+        versionCode = 10104
+        versionName = "1.0.1-internal-4"
     }
 
     buildTypes {
