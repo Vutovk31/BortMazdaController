@@ -39,3 +39,6 @@ The internal field candidate does not send arbitrary CAN frames, clear DTCs, exe
 6. Use `SAVE SUPPORT REPORT` and keep the generated TXT for analysis.
 
 OEM INFO/CLOCK/SET/TIME commands remain intentionally locked until the Mazda/TS10/RZ-MZD05 path is validated.
+
+## OEM protocol research
+The Mazda 3 BK owner's manual confirms the physical INFO/CLOCK interaction semantics, but does not publish the underlying electrical/CAN command protocol. Public CAN data found for Mazda3 2nd generation is recorded only as a research lead in `docs/PROTOCOL-EVIDENCE.md`; it is not used to send commands on this BK target.
