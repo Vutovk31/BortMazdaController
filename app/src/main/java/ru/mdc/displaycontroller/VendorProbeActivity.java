@@ -175,8 +175,9 @@ public class VendorProbeActivity extends Activity {
             } catch (Throwable t) {
                 result = "EXPORT_FAILED " + t.getClass().getSimpleName() + ": " + safe(t.getMessage());
             }
-            report = result;
-            runOnUiThread(() -> { output.setText(result); Toast.makeText(this, result, Toast.LENGTH_LONG).show(); });
+            final String finalResult = result;
+            report = finalResult;
+            runOnUiThread(() -> { output.setText(finalResult); Toast.makeText(this, finalResult, Toast.LENGTH_LONG).show(); });
         });
     }
 
