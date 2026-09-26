@@ -25,7 +25,8 @@ public class VendorProbeActivity extends Activity {
  final ExecutorService io=Executors.newSingleThreadExecutor(); TextView out; String report="NOT RUN"; Uri lastZip; final StringBuilder liveLog=new StringBuilder(); BroadcastReceiver mazdaRx; boolean monitorOn=false;
  public void onCreate(Bundle b){super.onCreate(b);LinearLayout r=new LinearLayout(this);r.setOrientation(LinearLayout.VERTICAL);r.setBackgroundColor(Color.rgb(8,10,13));
   r.addView(t("MDC MAZDA CONTRACT LAB • "+VERSION,22,Color.WHITE));r.addView(t("Evidence sprint. READ-ONLY: no CAN/MCU writes.",14,Color.LTGRAY));
-  r.addView(btn("1. START PASSIVE MAZDA DATA MONITOR",v->startPassiveMonitor()));\n  r.addView(btn("2. SMART VENDOR REPORT (TXT + JSON)",v->smartReport()));
+  r.addView(btn("1. START PASSIVE MAZDA DATA MONITOR",v->startPassiveMonitor()));
+  r.addView(btn("2. SMART VENDOR REPORT (TXT + JSON)",v->smartReport()));
   r.addView(btn("3. DEEP MAZDA CONTROLLER PROBE",v->probe()));
   r.addView(btn("4. EXPORT VENDOR APKS TO DOWNLOAD/MDC",v->exportPublic()));
   r.addView(btn("5. SHARE LAST ZIP",v->share()));
@@ -40,7 +41,8 @@ public class VendorProbeActivity extends Activity {
   mazdaRx=new BroadcastReceiver(){public void onReceive(Context c,Intent i){StringBuilder x=new StringBuilder();x.append("\nEVENT action=").append(i.getAction()).append(" package=").append(i.getPackage()).append("\n");Bundle e=i.getExtras();if(e==null)x.append("EXTRAS=<none>\n");else for(String k:e.keySet()){Object v;try{v=e.get(k);}catch(Throwable z){v="<error "+z+">";}x.append("EXTRA ").append(k).append("=").append(String.valueOf(v)).append(" type=").append(v==null?"null":v.getClass().getName()).append("\n");}liveLog.append(x);report=liveLog.toString();runOnUiThread(()->out.setText(report));}};
   IntentFilter q=new IntentFilter();q.addAction("ACTION_CAR_INFO_RECIEVE");q.addAction("CAR_RemainKON");q.addAction("CAR_WATER_TEMP");
   try{if(Build.VERSION.SDK_INT>=33)registerReceiver(mazdaRx,q,Context.RECEIVER_EXPORTED);else registerReceiver(mazdaRx,q);monitorOn=true;liveLog.append("STATUS=LISTENING\nACTIONS=ACTION_CAR_INFO_RECIEVE,CAR_RemainKON,CAR_WATER_TEMP\n");report=liveLog.toString();out.setText(report);}catch(Throwable e){report="PASSIVE_MONITOR_FAILED "+e;out.setText(report);}}
-\n void smartReport(){out.setText("Building smart vendor report…");io.submit(()->{StringBuilder b=new StringBuilder();
+
+ void smartReport(){out.setText("Building smart vendor report…");io.submit(()->{StringBuilder b=new StringBuilder();
   b.append("MDC_SMART_VENDOR_SCHEMA=1\nVERSION=").append(VERSION).append("\nREAD_ONLY=true\nCAN_WRITE=false\nOEM_WRITE=false\n");
   b.append("TARGET=TS10/RZ-MZD05/Mazda3BK\n");
   reflect(b,"android.tw.john.TWUtil",getClassLoader());
