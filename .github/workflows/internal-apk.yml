@@ -20,7 +20,7 @@ jobs:
      run: sha256sum app/build/outputs/apk/debug/app-debug.apk > app/build/outputs/apk/debug/app-debug.apk.sha256
    - uses: actions/upload-artifact@v4
      with:
-      name: MDC-1.0.1-internal-8
+      name: MDC-1.0.1-internal-9
       path: |
        app/build/outputs/apk/debug/app-debug.apk
        app/build/outputs/apk/debug/app-debug.apk.sha256
