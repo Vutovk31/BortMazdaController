@@ -19,20 +19,37 @@ import java.util.concurrent.*;
 import java.util.zip.*;
 
 public class VendorProbeActivity extends Activity {
- static final String VERSION="1.0.1-internal-7";
+ static final String VERSION="1.0.1-internal-8";
  static final String[] PKGS={"com.tw.car","com.tw.carinfoservice","com.tw.service.xt","com.tw.carchoose","com.tw.service"};
  static final String[] CLASSES={"com.tw.car.MazdaPreference","com.tw.car.MazdaRaiseActivity","com.tw.car.MazdaFuleInfo","com.tw.car.MazdaVehicleInfoActivity","c.b.a.a","com.tw.service.xt.CommandService","com.tw.service.xt.aidl.ITWCommandAidl","com.tw.service.xt.aidl.ITWCommandCallbackAidl"};
  final ExecutorService io=Executors.newSingleThreadExecutor(); TextView out; String report="NOT RUN"; Uri lastZip;
  public void onCreate(Bundle b){super.onCreate(b);LinearLayout r=new LinearLayout(this);r.setOrientation(LinearLayout.VERTICAL);r.setBackgroundColor(Color.rgb(8,10,13));
   r.addView(t("MDC MAZDA CONTRACT LAB • "+VERSION,22,Color.WHITE));r.addView(t("Evidence sprint. READ-ONLY: no CAN/MCU writes.",14,Color.LTGRAY));
-  r.addView(btn("1. DEEP MAZDA CONTROLLER PROBE",v->probe()));
-  r.addView(btn("2. EXPORT VENDOR APKS TO DOWNLOAD/MDC",v->exportPublic()));
-  r.addView(btn("3. SHARE LAST ZIP",v->share()));
+  r.addView(btn("1. SMART VENDOR REPORT (TXT + JSON)",v->smartReport()));
+  r.addView(btn("2. DEEP MAZDA CONTROLLER PROBE",v->probe()));
+  r.addView(btn("3. EXPORT VENDOR APKS TO DOWNLOAD/MDC",v->exportPublic()));
+  r.addView(btn("4. SHARE LAST ZIP",v->share()));
   r.addView(btn("COPY REPORT",v->copy()));
-  out=t("Run 1, then 2. Export goes to public Download/MDC and can be shared directly.",12,Color.rgb(185,220,185));ScrollView s=new ScrollView(this);s.addView(out);r.addView(s,new LinearLayout.LayoutParams(-1,0,1));setContentView(r);
+  out=t("Run SMART VENDOR REPORT first. It writes small TXT + JSON files to Download/MDC. READ-ONLY.",12,Color.rgb(185,220,185));ScrollView s=new ScrollView(this);s.addView(out);r.addView(s,new LinearLayout.LayoutParams(-1,0,1));setContentView(r);
  }
  TextView t(String s,int z,int c){TextView v=new TextView(this);v.setText(s);v.setTextSize(z);v.setTextColor(c);v.setPadding(18,10,18,10);return v;}
  Button btn(String s,View.OnClickListener l){Button b=new Button(this);b.setText(s);b.setOnClickListener(l);return b;}
+
+ void smartReport(){out.setText("Building smart vendor report…");io.submit(()->{StringBuilder b=new StringBuilder();
+  b.append("MDC_SMART_VENDOR_SCHEMA=1\nVERSION=").append(VERSION).append("\nREAD_ONLY=true\nCAN_WRITE=false\nOEM_WRITE=false\n");
+  b.append("TARGET=TS10/RZ-MZD05/Mazda3BK\n");
+  reflect(b,"android.tw.john.TWUtil",getClassLoader());
+  for(String cn:CLASSES){String p=cn.startsWith("com.tw.service")?"com.tw.service.xt":"com.tw.car";inspect(b,p,cn);}
+  String[] keys={"Mazda","Fuel","Fule","Consumption","Remain","Range","Time","Clock","INFO","RESET","sendKeyCode","sendCarSettingsType","extendedInterface","ACTION_CAR_INFO","CAR_RemainKON","CAR_WATER_TEMP","TWUtil","RZC","mCanId","time_setting_key","fuel_info_key"};
+  for(String p:PKGS){pkg(b,p);scanApkStrings(b,p,keys);}
+  String json="{\n  \"version\":\""+VERSION+"\",\n  \"read_only\":true,\n  \"can_write\":false,\n  \"oem_write\":false,\n  \"targets\":[\"c.b.a.a\",\"android.tw.john.TWUtil\",\"com.tw.service.xt.CommandService\"],\n  \"evidence_keys\":[\"sendKeyCode\",\"sendCarSettingsType\",\"extendedInterface\",\"time_setting_key\",\"fuel_info_key\",\"ACTION_CAR_INFO_REQUEST\",\"ACTION_CAR_INFO_RECIEVE\"]\n}\n";
+  try{String a=saveText("MDC_vendor_analysis-"+stamp()+".txt",b.toString());String j=saveText("MDC_command_map-"+stamp()+".json",json);report=b.toString();final String x="SMART_REPORT_OK\n"+a+"\n"+j+"\n\n"+report;runOnUiThread(()->out.setText(x));}catch(Throwable e){final String x="SMART_REPORT_FAILED "+e;report=x;runOnUiThread(()->out.setText(x));}
+ });}
+ String stamp(){return new SimpleDateFormat("yyyyMMdd-HHmmss",Locale.US).format(new Date());}
+ String saveText(String name,String data)throws Exception{ContentValues cv=new ContentValues();cv.put(MediaStore.Downloads.DISPLAY_NAME,name);cv.put(MediaStore.Downloads.MIME_TYPE,name.endsWith(".json")?"application/json":"text/plain");cv.put(MediaStore.Downloads.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/MDC");Uri u=getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,cv);if(u==null)throw new IOException("MediaStore insert null");try(OutputStream o=getContentResolver().openOutputStream(u)){o.write(data.getBytes("UTF-8"));}return "SAVED=Download/MDC/"+name+" URI="+u;}
+ void scanApkStrings(StringBuilder b,String p,String[] keys){b.append("\nSTATIC_STRING_SCAN=").append(p).append("\n");try{ApplicationInfo ai=getPackageManager().getApplicationInfo(p,0);byte[] raw=readLimited(ai.sourceDir,16*1024*1024);String s=new String(raw,"ISO-8859-1");for(String k:keys){int from=0,count=0;while(count<12){int i=s.indexOf(k,from);if(i<0)break;int lo=Math.max(0,i-90),hi=Math.min(s.length(),i+k.length()+140);String x=s.substring(lo,hi).replaceAll("[^\\x20-\\x7E]"," ");x=x.replaceAll(" +"," ");b.append("HIT[").append(k).append("]=").append(x).append("\n");from=i+k.length();count++;}}}catch(Throwable e){b.append("SCAN_ERROR=").append(e).append("\n");}}
+ byte[] readLimited(String path,int max)throws Exception{try(InputStream in=new FileInputStream(path);ByteArrayOutputStream o=new ByteArrayOutputStream()){byte[] q=new byte[65536];int n,total=0;while((n=in.read(q))>0&&total<max){int w=Math.min(n,max-total);o.write(q,0,w);total+=w;}return o.toByteArray();}}
+
  void probe(){out.setText("Probing…");io.submit(()->{StringBuilder b=new StringBuilder("MDC_MAZDA_DATA_PROBE_SCHEMA=3\nVERSION="+VERSION+"\nREAD_ONLY=true\nCAN_WRITE=false\n");reflect(b,"android.tw.john.TWUtil",getClassLoader());for(String c:CLASSES){String p=c.startsWith("com.tw.service")?"com.tw.service.xt":"com.tw.car";inspect(b,p,c);}for(String p:PKGS)pkg(b,p);report=b.toString();runOnUiThread(()->out.setText(report));});}
  void inspect(StringBuilder b,String pkg,String cn){b.append("\nCLASS=").append(cn).append("\n");try{ApplicationInfo ai=getPackageManager().getApplicationInfo(pkg,0);File od=new File(getCodeCacheDir(),"i7-"+pkg.replace('.','_'));od.mkdirs();ClassLoader cl=new DexClassLoader(ai.sourceDir,od.getAbsolutePath(),ai.nativeLibraryDir,getClassLoader());reflect(b,cn,cl);}catch(Throwable e){b.append("ERROR=").append(e).append("\n");}}
  void reflect(StringBuilder b,String cn,ClassLoader cl){try{Class<?> c=Class.forName(cn,false,cl);b.append("LOADED=true modifiers=").append(Modifier.toString(c.getModifiers())).append("\n");for(Constructor<?> x:c.getDeclaredConstructors())b.append("CTOR=").append(x).append("\n");for(Method m:c.getDeclaredMethods())b.append("METHOD=").append(m).append("\n");for(Field f:c.getDeclaredFields())b.append("FIELD=").append(f).append("\n");}catch(Throwable e){b.append("LOADED=false ").append(e).append("\n");}}
