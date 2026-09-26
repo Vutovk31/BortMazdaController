@@ -1,7 +1,7 @@
 plugins { id("com.android.application") }
 android {
  namespace = "ru.mdc.displaycontroller"; compileSdk = 35
- defaultConfig { applicationId = "ru.mdc.displaycontroller"; minSdk = 26; targetSdk = 31; versionCode = 10109; versionName = "1.0.1-internal-9" }
+ defaultConfig { applicationId = "ru.mdc.displaycontroller"; minSdk = 26; targetSdk = 31; versionCode = 10110; versionName = "1.0.1-internal-10" }
  buildTypes {
   debug { applicationIdSuffix = ".internal"; versionNameSuffix = ""; buildConfigField("boolean","CAN_WRITE","false"); buildConfigField("String","SAFETY_PROFILE","\"READ_ONLY_1_0_1\"") }
   release { isMinifyEnabled = false; buildConfigField("boolean","CAN_WRITE","false"); buildConfigField("String","SAFETY_PROFILE","\"READ_ONLY_1_0_1\"") }
