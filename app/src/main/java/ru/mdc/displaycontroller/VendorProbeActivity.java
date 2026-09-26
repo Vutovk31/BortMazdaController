@@ -19,23 +19,28 @@ import java.util.concurrent.*;
 import java.util.zip.*;
 
 public class VendorProbeActivity extends Activity {
- static final String VERSION="1.0.1-internal-8";
+ static final String VERSION="1.0.1-internal-9";
  static final String[] PKGS={"com.tw.car","com.tw.carinfoservice","com.tw.service.xt","com.tw.carchoose","com.tw.service"};
  static final String[] CLASSES={"com.tw.car.MazdaPreference","com.tw.car.MazdaRaiseActivity","com.tw.car.MazdaFuleInfo","com.tw.car.MazdaVehicleInfoActivity","c.b.a.a","com.tw.service.xt.CommandService","com.tw.service.xt.aidl.ITWCommandAidl","com.tw.service.xt.aidl.ITWCommandCallbackAidl"};
- final ExecutorService io=Executors.newSingleThreadExecutor(); TextView out; String report="NOT RUN"; Uri lastZip;
+ final ExecutorService io=Executors.newSingleThreadExecutor(); TextView out; String report="NOT RUN"; Uri lastZip; final StringBuilder liveLog=new StringBuilder(); BroadcastReceiver mazdaRx; boolean monitorOn=false;
  public void onCreate(Bundle b){super.onCreate(b);LinearLayout r=new LinearLayout(this);r.setOrientation(LinearLayout.VERTICAL);r.setBackgroundColor(Color.rgb(8,10,13));
   r.addView(t("MDC MAZDA CONTRACT LAB • "+VERSION,22,Color.WHITE));r.addView(t("Evidence sprint. READ-ONLY: no CAN/MCU writes.",14,Color.LTGRAY));
-  r.addView(btn("1. SMART VENDOR REPORT (TXT + JSON)",v->smartReport()));
-  r.addView(btn("2. DEEP MAZDA CONTROLLER PROBE",v->probe()));
-  r.addView(btn("3. EXPORT VENDOR APKS TO DOWNLOAD/MDC",v->exportPublic()));
-  r.addView(btn("4. SHARE LAST ZIP",v->share()));
+  r.addView(btn("1. START PASSIVE MAZDA DATA MONITOR",v->startPassiveMonitor()));\n  r.addView(btn("2. SMART VENDOR REPORT (TXT + JSON)",v->smartReport()));
+  r.addView(btn("3. DEEP MAZDA CONTROLLER PROBE",v->probe()));
+  r.addView(btn("4. EXPORT VENDOR APKS TO DOWNLOAD/MDC",v->exportPublic()));
+  r.addView(btn("5. SHARE LAST ZIP",v->share()));
   r.addView(btn("COPY REPORT",v->copy()));
-  out=t("Run SMART VENDOR REPORT first. It writes small TXT + JSON files to Download/MDC. READ-ONLY.",12,Color.rgb(185,220,185));ScrollView s=new ScrollView(this);s.addView(out);r.addView(s,new LinearLayout.LayoutParams(-1,0,1));setContentView(r);
+  out=t("Internal-9: passive Mazda data capture. Start monitor, then change climate / open stock Vehicle Information. No broadcasts or MCU/CAN writes are sent.",12,Color.rgb(185,220,185));ScrollView s=new ScrollView(this);s.addView(out);r.addView(s,new LinearLayout.LayoutParams(-1,0,1));setContentView(r);
  }
  TextView t(String s,int z,int c){TextView v=new TextView(this);v.setText(s);v.setTextSize(z);v.setTextColor(c);v.setPadding(18,10,18,10);return v;}
  Button btn(String s,View.OnClickListener l){Button b=new Button(this);b.setText(s);b.setOnClickListener(l);return b;}
 
- void smartReport(){out.setText("Building smart vendor report…");io.submit(()->{StringBuilder b=new StringBuilder();
+
+ void startPassiveMonitor(){if(monitorOn){out.setText("PASSIVE_MONITOR_ALREADY_RUNNING\n"+liveLog);return;}liveLog.append("MDC_PASSIVE_MAZDA_MONITOR=1\nVERSION=").append(VERSION).append("\nCAN_WRITE=false\nOEM_WRITE=false\n");
+  mazdaRx=new BroadcastReceiver(){public void onReceive(Context c,Intent i){StringBuilder x=new StringBuilder();x.append("\nEVENT action=").append(i.getAction()).append(" package=").append(i.getPackage()).append("\n");Bundle e=i.getExtras();if(e==null)x.append("EXTRAS=<none>\n");else for(String k:e.keySet()){Object v;try{v=e.get(k);}catch(Throwable z){v="<error "+z+">";}x.append("EXTRA ").append(k).append("=").append(String.valueOf(v)).append(" type=").append(v==null?"null":v.getClass().getName()).append("\n");}liveLog.append(x);report=liveLog.toString();runOnUiThread(()->out.setText(report));}};
+  IntentFilter q=new IntentFilter();q.addAction("ACTION_CAR_INFO_RECIEVE");q.addAction("CAR_RemainKON");q.addAction("CAR_WATER_TEMP");
+  try{if(Build.VERSION.SDK_INT>=33)registerReceiver(mazdaRx,q,Context.RECEIVER_EXPORTED);else registerReceiver(mazdaRx,q);monitorOn=true;liveLog.append("STATUS=LISTENING\nACTIONS=ACTION_CAR_INFO_RECIEVE,CAR_RemainKON,CAR_WATER_TEMP\n");report=liveLog.toString();out.setText(report);}catch(Throwable e){report="PASSIVE_MONITOR_FAILED "+e;out.setText(report);}}
+\n void smartReport(){out.setText("Building smart vendor report…");io.submit(()->{StringBuilder b=new StringBuilder();
   b.append("MDC_SMART_VENDOR_SCHEMA=1\nVERSION=").append(VERSION).append("\nREAD_ONLY=true\nCAN_WRITE=false\nOEM_WRITE=false\n");
   b.append("TARGET=TS10/RZ-MZD05/Mazda3BK\n");
   reflect(b,"android.tw.john.TWUtil",getClassLoader());
@@ -65,6 +70,6 @@ public class VendorProbeActivity extends Activity {
  String hex(byte[] d){StringBuilder s=new StringBuilder();for(byte x:d)s.append(String.format(Locale.US,"%02x",x));return s.toString();}
  void share(){if(lastZip==null){Toast.makeText(this,"Export ZIP first",Toast.LENGTH_LONG).show();return;}Intent i=new Intent(Intent.ACTION_SEND);i.setType("application/zip");i.putExtra(Intent.EXTRA_STREAM,lastZip);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(i,"Share MDC vendor APK ZIP"));}
  void copy(){((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("MDC",report));Toast.makeText(this,"Copied",Toast.LENGTH_SHORT).show();}
- protected void onDestroy(){io.shutdownNow();super.onDestroy();}
+ protected void onDestroy(){if(monitorOn&&mazdaRx!=null)try{unregisterReceiver(mazdaRx);}catch(Throwable ignored){}io.shutdownNow();super.onDestroy();}
  static class DigestOutputStream extends FilterOutputStream{final MessageDigest d;DigestOutputStream(OutputStream o,MessageDigest d){super(o);this.d=d;}public void write(int b)throws IOException{out.write(b);d.update((byte)b);}public void write(byte[] b,int o,int l)throws IOException{out.write(b,o,l);d.update(b,o,l);}}
 }
