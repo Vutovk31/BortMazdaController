@@ -1,0 +1,2 @@
+Trigger internal APK build for MDC 1.0.1 internal-1.
+CAN_WRITE=false

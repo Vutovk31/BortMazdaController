@@ -1,0 +1,1 @@
+MDC 1.0.1 internal field candidate. Build workflow generates debug APK artifact. CAN_WRITE=false.
